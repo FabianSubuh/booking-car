@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyundai Test Drive Booking</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); max-width: 900px; margin: auto; }
+        h1, h2 { color: #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input[type="date"], input[type="datetime-local"], select, button {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; margin-top: 15px; }
+        button.cancel-button { background-color: #6c757d; margin-left: 10px; }
+        button:hover { background-color: #0056b3; }
+        button.cancel-button:hover { background-color: #5a6268; }
+        .form-section { border: 1px solid #eee; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
+        .error { color: red; margin-top: 5px; }
+        .success { color: green; margin-top: 5px; }
+        #carList, #bookingList { margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; }
+        #carList div, #bookingList div { background-color: #f9f9f9; border: 1px solid #ddd; margin-bottom: 10px; padding: 10px; border-radius: 4px; }
+        img { max-width: 150px; height: auto; display: block; margin-top: 10px; border-radius: 4px; }
+        .car-actions { margin-top: 10px; }
+        .car-actions button { width: auto; padding: 8px 12px; margin-right: 5px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Hyundai Test Drive Booking System</h1>
+
+    <hr/>
+
+    <div class="form-section">
+        <h2>Manage Car Models</h2>
+        <h3><span id="carFormTitle">Add New Car</span></h3>
+        <div id="addCarStatus" class="message"></div>
+        <input type="hidden" id="editCarId"> <label for="newCarModelName">Model Name:</label>
+        <input type="text" id="newCarModelName" required>
+        <label for="newCarBrand">Brand:</label>
+        <input type="text" id="newCarBrand" value="Hyundai" required>
+        <label for="newCarProdYear">Production Year:</label>
+        <input type="number" id="newCarProdYear" min="1900" max="2100" required>
+        <label for="newCarColor">Color:</label>
+        <input type="text" id="newCarColor">
+        <label for="newCarFeatures">Features:</label>
+        <input type="text" id="newCarFeatures">
+        <label for="newCarImageUrl">Image URL:</label>
+        <input type="text" id="newCarImageUrl" value="https://via.placeholder.com/150">
+
+        <button onclick="saveCar()" id="saveCarButton">Add Car</button>
+        <button onclick="cancelEditCar()" id="cancelEditCarButton" class="cancel-button" style="display: none;">Cancel Edit</button>
+    </div>
+
+    <div class="form-section">
+        <h3>Available Car Models</h3>
+        <button onclick="fetchCars()">Refresh Car List</button>
+        <div id="carList">Loading cars...</div>
+    </div>
+
+    <hr/>
+
+    <div class="form-section">
+        <h2>Book Test Drive</h2>
+        <div id="bookingStatus" class="message"></div>
+        <label for="bookingCarSelect">Select Car Model:</label>
+        <select id="bookingCarSelect" onchange="fetchAvailableSlots()" required>
+            <option value="">-- Select a Car --</option>
+        </select>
+
+        <label for="bookingDate">Preferred Date:</label>
+        <input type="date" id="bookingDate" onchange="fetchAvailableSlots()" required>
+
+        <label for="bookingTimeSelect">Available Time Slot:</label>
+        <select id="bookingTimeSelect" required>
+            <option value="">-- Select a Time --</option>
+        </select>
+
+        <label for="customerName">Customer Name:</label>
+        <input type="text" id="customerName" required>
+        <label for="customerEmail">Customer Email:</label>
+        <input type="email" id="customerEmail" required>
+        <label for="customerPhone">Customer Phone:</label>
+        <input type="tel" id="customerPhone" required>
+
+        <button onclick="bookTestDrive()">Book Test Drive</button>
+    </div>
+
+    <hr/>
+
+    <div class="form-section">
+        <h2>All Bookings</h2>
+        <button onclick="fetchAllBookings()">Refresh Bookings</button>
+        <div id="bookingList">Loading bookings...</div>
+    </div>
+</div>
+
+<script>
+    const API_GATEWAY_URL = 'http://localhost:8080/api';
+    let editingCarId = null; // Global variable to store the ID of the car being edited
+
+    // --- Utility Functions ---
+    function displayMessage(elementId, message, type) {
+        const element = document.getElementById(elementId);
+        element.textContent = message;
+        element.className = type; // 'success' or 'error'
+        setTimeout(() => { element.textContent = ''; element.className = ''; }, 5000);
+    }
+
+    function clearCarForm() {
+        document.getElementById('editCarId').value = '';
+        document.getElementById('newCarModelName').value = '';
+        document.getElementById('newCarBrand').value = 'Hyundai';
+        document.getElementById('newCarProdYear').value = '';
+        document.getElementById('newCarColor').value = '';
+        document.getElementById('newCarFeatures').value = '';
+        document.getElementById('newCarImageUrl').value = 'https://via.placeholder.com/150';
+
+        document.getElementById('carFormTitle').textContent = 'Add New Car';
+        document.getElementById('saveCarButton').textContent = 'Add Car';
+        document.getElementById('cancelEditCarButton').style.display = 'none';
+        editingCarId = null; // Reset editing state
+    }
+
+    // --- Car Model Management ---
+    async function fetchCars() {
+        const carListDiv = document.getElementById('carList');
+        carListDiv.innerHTML = 'Loading cars...';
+        try {
+            const response = await fetch(`${API_GATEWAY_URL}/cars`);
+            const cars = await response.json();
+            carListDiv.innerHTML = '';
+            const carSelect = document.getElementById('bookingCarSelect');
+            carSelect.innerHTML = '<option value="">-- Select a Car --</option>';
+
+            if (cars.length === 0) {
+                carListDiv.innerHTML = '<p>No cars available. Please add some.</p>';
+                return;
+            }
+
+            cars.forEach(car => {
+                carListDiv.innerHTML += `
+                        <div>
+                            <strong>${car.modelName} (${car.prodYear})</strong> - ${car.color}<br>
+                            Brand: ${car.brand}<br>
+                            Features: ${car.features || 'N/A'}<br>
+                            ${car.imageUrl ? `<img src="${car.imageUrl}" alt="${car.modelName} Image">` : ''}
+                            <div class="car-actions">
+                                <button onclick="startEditCar(${car.id})">Edit</button>
+                                <button onclick="deleteCar(${car.id})">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                const option = document.createElement('option');
+                option.value = car.id;
+                option.textContent = `${car.brand} ${car.modelName} (${car.prodYear})`;
+                carSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error fetching cars:', error);
+            displayMessage('carList', '<p class="error">Failed to load cars. Ensure Car Catalog Service is running.</p>', 'error');
+        }
+    }
+
+    // Handles both Add (POST) and Update (PUT)
+    async function saveCar() {
+        const id = document.getElementById('editCarId').value;
+        const modelName = document.getElementById('newCarModelName').value;
+        const brand = document.getElementById('newCarBrand').value;
+        const prodYear = parseInt(document.getElementById('newCarProdYear').value);
+        const color = document.getElementById('newCarColor').value;
+        const features = document.getElementById('newCarFeatures').value;
+        const imageUrl = document.getElementById('newCarImageUrl').value;
+
+        const car = { modelName, brand, prodYear, color, features, imageUrl };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `${API_GATEWAY_URL}/cars/${id}` : `${API_GATEWAY_URL}/cars`;
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(car)
+            });
+
+            if (response.ok) {
+                displayMessage('addCarStatus', `Car ${method === 'POST' ? 'added' : 'updated'} successfully!`, 'success');
+                clearCarForm(); // Clear form and switch back to add mode
+                fetchCars(); // Refresh list
+            } else {
+                let errorMessage = 'An unexpected error occurred.';
+                try {
+                    const errorData = await response.json();
+                    if (errorData && errorData.errors && errorData.errors.length > 0) {
+                        errorMessage = errorData.errors.map(err => err.defaultMessage || err.message).join(', ');
+                    } else if (errorData && errorData.message) {
+                        errorMessage = errorData.message;
+                    } else {
+                        errorMessage = `Server responded with status ${response.status}. Details: ${JSON.stringify(errorData)}`;
+                    }
+                } catch (jsonError) {
+                    const textResponse = await response.text();
+                    if (textResponse) {
+                        errorMessage = `Server responded with status ${response.status}. Raw error: ${textResponse}`;
+                    } else {
+                        errorMessage = `Server responded with status ${response.status}. No detailed error message available.`;
+                    }
+                    console.error('Error parsing JSON response:', jsonError);
+                }
+                displayMessage('addCarStatus', `Error ${method === 'POST' ? 'adding' : 'updating'} car: ` + errorMessage, 'error');
+            }
+        } catch (error) {
+            console.error('Network or unexpected error:', error);
+            displayMessage('addCarStatus', 'Failed to connect to the server or an unexpected network error occurred.', 'error');
+        }
+    }
+
+    async function startEditCar(carId) {
+        try {
+            const response = await fetch(`${API_GATEWAY_URL}/cars/${carId}`);
+            if (response.ok) {
+                const car = await response.json();
+                document.getElementById('editCarId').value = car.id;
+                document.getElementById('newCarModelName').value = car.modelName;
+                document.getElementById('newCarBrand').value = car.brand;
+                document.getElementById('newCarProdYear').value = car.prodYear;
+                document.getElementById('newCarColor').value = car.color;
+                document.getElementById('newCarFeatures').value = car.features;
+                document.getElementById('newCarImageUrl').value = car.imageUrl;
+
+                document.getElementById('carFormTitle').textContent = 'Edit Car Model (ID: ' + car.id + ')';
+                document.getElementById('saveCarButton').textContent = 'Update Car';
+                document.getElementById('cancelEditCarButton').style.display = 'inline-block';
+                editingCarId = car.id; // Set editing state
+            } else {
+                displayMessage('addCarStatus', 'Failed to load car for editing.', 'error');
+            }
+        } catch (error) {
+            console.error('Error fetching car for edit:', error);
+            displayMessage('addCarStatus', 'Network error while fetching car for edit.', 'error');
+        }
+    }
+
+    function cancelEditCar() {
+        clearCarForm(); // Simply clear the form to revert to add mode
+    }
+
+
+    async function deleteCar(carId) {
+        if (!confirm('Are you sure you want to delete this car?')) return;
+        try {
+            const response = await fetch(`${API_GATEWAY_URL}/cars/${carId}`, {
+                method: 'DELETE'
+            });
+            if (response.ok) {
+                displayMessage('addCarStatus', 'Car deleted successfully!', 'success');
+                fetchCars(); // Refresh list
+            } else {
+                displayMessage('addCarStatus', 'Failed to delete car.', 'error');
+            }
+        } catch (error) {
+            console.error('Error deleting car:', error);
+            displayMessage('addCarStatus', 'Failed to delete car. Ensure Car Catalog Service is running.', 'error');
+        }
+    }
+
+    // --- Test Drive Booking Management ---
+    async function fetchAvailableSlots() {
+        const carId = document.getElementById('bookingCarSelect').value;
+        const date = document.getElementById('bookingDate').value;
+        const timeSelect = document.getElementById('bookingTimeSelect');
+        timeSelect.innerHTML = '<option value="">-- Select a Time --</option>'; // Clear existing options
+
+        if (!carId || !date) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_GATEWAY_URL}/bookings/available-slots?carId=${carId}&date=${date}`);
+            const slots = await response.json();
+
+            if (slots.length === 0) {
+                timeSelect.innerHTML = '<option value="">No slots available for this date/car</option>';
+                return;
+            }
+
+            slots.forEach(slot => {
+                const option = document.createElement('option');
+                option.value = slot;
+                option.textContent = slot;
+                timeSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error fetching available slots:', error);
+            displayMessage('bookingStatus', 'Failed to fetch available slots. Ensure Booking Service is running.', 'error');
+        }
+    }
+
+    async function bookTestDrive() {
+        const carId = document.getElementById('bookingCarSelect').value;
+        const date = document.getElementById('bookingDate').value;
+        const time = document.getElementById('bookingTimeSelect').value;
+        const customerName = document.getElementById('customerName').value;
+        const customerEmail = document.getElementById('customerEmail').value;
+        const customerPhone = document.getElementById('customerPhone').value;
+
+        if (!carId || !date || !time || !customerName || !customerEmail || !customerPhone) {
+            displayMessage('bookingStatus', 'Please fill all required fields.', 'error');
+            return;
+        }
+
+        const preferredDateTime = `${date}T${time}`; // Correct format: YYYY-MM-DDTHH:MM:SS
+
+        const booking = {
+            carId: parseInt(carId),
+            customerName,
+            customerEmail,
+            customerPhone,
+            preferredDateTime
+        };
+
+        try {
+            const response = await fetch(`${API_GATEWAY_URL}/bookings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(booking)
+            });
+
+            if (response.ok) {
+                displayMessage('bookingStatus', 'Test drive booked successfully!', 'success');
+                // Clear form
+                document.getElementById('bookingCarSelect').value = '';
+                document.getElementById('bookingDate').value = '';
+                document.getElementById('bookingTimeSelect').innerHTML = '<option value="">-- Select a Time --</option>';
+                document.getElementById('customerName').value = '';
+                document.getElementById('customerEmail').value = '';
+                document.getElementById('customerPhone').value = '';
+                fetchAllBookings(); // Refresh list
+                fetchCars(); // To refresh car list in case availability changed
+            } else {
+                let errorMessage = 'An unexpected error occurred.';
+                try {
+                    const errorData = await response.json();
+                    if (errorData && errorData.errors && errorData.errors.length > 0) {
+                        errorMessage = errorData.errors.map(err => err.defaultMessage || err.message).join(', ');
+                    } else if (errorData && errorData.message) {
+                        errorMessage = errorData.message;
+                    } else {
+                        errorMessage = `Server responded with status ${response.status}. Details: ${JSON.stringify(errorData)}`;
+                    }
+                } catch (jsonError) {
+                    const textResponse = await response.text();
+                    if (textResponse) {
+                        errorMessage = `Server responded with status ${response.status}. Raw error: ${textResponse}`;
+                    } else {
+                        errorMessage = `Server responded with status ${response.status}. No detailed error message available.`;
+                    }
+                    console.error('Error parsing JSON response:', jsonError);
+                }
+                displayMessage('bookingStatus', 'Error booking test drive: ' + errorMessage, 'error');
+            }
+        } catch (error) {
+            console.error('Network or unexpected error:', error);
+            displayMessage('bookingStatus', 'Failed to connect to the server or an unexpected network error occurred.', 'error');
+        }
+    }
+
+    async function fetchAllBookings() {
+        const bookingListDiv = document.getElementById('bookingList');
+        bookingListDiv.innerHTML = 'Loading bookings...';
+        try {
+            const response = await fetch(`${API_GATEWAY_URL}/bookings`);
+            const bookings = await response.json();
+            bookingListDiv.innerHTML = '';
+
+            if (bookings.length === 0) {
+                bookingListDiv.innerHTML = '<p>No bookings found.</p>';
+                return;
+            }
+
+            bookings.forEach(booking => {
+                bookingListDiv.innerHTML += `
+                        <div>
+                            <strong>Booking ID: ${booking.id}</strong><br>
+                            Car ID: ${booking.carId}<br>
+                            Customer: ${booking.customerName} (${booking.customerEmail}, ${booking.customerPhone})<br>
+                            Date/Time: ${new Date(booking.preferredDateTime).toLocaleString()}<br>
+                            Status: ${booking.status}
+                        </div>
+                    `;
+            });
+        } catch (error) {
+            console.error('Error fetching bookings:', error);
+            displayMessage('bookingList', '<p class="error">Failed to load bookings. Ensure Booking Service is running.</p>', 'error');
+        }
+    }
+
+
+    // Initial loads
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchCars();
+        fetchAllBookings();
+        // Set default date to tomorrow
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        document.getElementById('bookingDate').value = tomorrow.toISOString().split('T')[0];
+    });
+</script>
+</body>
+</html>

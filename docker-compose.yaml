@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  car-catalog-service:
+    build:
+      context: . # Set the build context to the root of the project
+      dockerfile: ./car-catalog-service/Dockerfile
+    image: java-test-205/car-catalog-service:latest # Custom image name
+    ports:
+      - "8081:8081"
+    # For H2 console:
+    # command: ["java", "-jar", "app.jar", "--spring.h2.console.enabled=true", "--spring.h2.console.settings.web-allow-others=true"]
+    networks:
+      - bian-network
+
+  testdrive-booking-service:
+    build:
+      context: . # Set the build context to the root of the project
+      dockerfile: ./testdrive-booking-service/Dockerfile
+    image: java-test-205/testdrive-booking-service:latest # Custom image name
+    ports:
+      - "8082:8082"
+    depends_on:
+      - car-catalog-service # Ensure car-catalog is up before booking (logical dependency)
+    networks:
+      - bian-network
+
+  api-gateway:
+    build:
+      context: . # Set the build context to the root of the project
+      dockerfile: ./api-gateway/Dockerfile
+    image: java-test-205/api-gateway:latest # Custom image name
+    ports:
+      - "8080:8080" # This is the main port to access the application
+    depends_on:
+      - car-catalog-service
+      - testdrive-booking-service
+    networks:
+      - bian-network
+
+networks:
+  bian-network:
+    driver: bridge
