@@ -6,22 +6,21 @@ spring:
     gateway:
       routes:
         - id: car_catalog_route
-          uri: http://localhost:8081
+          uri: http://car-catalog-service:8081
           predicates:
             - Path=/api/cars/**
           filters:
             - RewritePath=/api/cars/(?<segment>.*), /api/cars/${segment}
         # Explicit route for POST /api/bookings (base path)
         - id: testdrive_booking_base_route # New ID
-          uri: http://localhost:8082
+          uri: http://testdrive-booking-service:8082
           predicates:
             - Path=/api/bookings # Match exactly /api/bookings (no trailing slash)
           filters:
             - RewritePath=/api/bookings, /api/bookings # Rewrite /api/bookings to /api/bookings
-
         # Route for /api/bookings/available-slots and any other sub-paths
         - id: testdrive_booking_sub_routes # New ID
-          uri: http://localhost:8082
+          uri: http://testdrive-booking-service:8082
           predicates:
             - Path=/api/bookings/** # Matches /api/bookings/anything, /api/bookings/available-slots etc.
           filters:
