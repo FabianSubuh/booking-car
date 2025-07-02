@@ -38,7 +38,7 @@ public class Booking {
     @Future(message = "Booking date and time must be in the future")
     private LocalDateTime preferredDateTime;
 
-    private String status = "PENDING"; // PENDING, CONFIRMED, COMPLETED, CANCELED
+    private String status = "COMPLETED"; // PENDING, CONFIRMED, COMPLETED, CANCELED
 
 
     @Transient
