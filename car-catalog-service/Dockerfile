@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Crucial: Copy the entire multi-module project from the host's root context
 COPY pom.xml ./
-COPY api-gateway ./api-gatewaygit
+COPY api-gateway ./api-gateway
 COPY car-catalog-service ./car-catalog-service
 COPY testdrive-booking-service ./testdrive-booking-service
 
@@ -16,7 +16,7 @@ RUN echo "--- Attempting Maven build for car-catalog-service ---"
 # --- END DEBUGGING LINES ---
 
 # Change to the specific module's directory inside the container python3 -m http.server 3000
-WORKDIR /app/
+WORKDIR /app
 
 # Build only this module, but with the full reactor available
 RUN mvn clean install -pl car-catalog-service -am -DskipTests
